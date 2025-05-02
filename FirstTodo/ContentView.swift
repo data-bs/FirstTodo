@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreML
 
 struct ContentView: View {
     @State private var newTodo: String = ""
@@ -29,7 +30,13 @@ struct ContentView: View {
 
             List {
                 ForEach(todoList, id: \.self) { todo in
-                    Text(todo)
+                    let (icon, color) = iconAndColor(for: todo)
+
+                    HStack {
+                        Text(icon)
+                        Text(todo)
+                    }
+                    .foregroundColor(color)
                 }
                 .onDelete(perform: deleteTodo)
             }
@@ -64,6 +71,27 @@ struct ContentView: View {
     func loadTodoList() {
         if let savedTodos = UserDefaults.standard.stringArray(forKey: "TodoList") {
             todoList = savedTodos
+        }
+    }
+
+    // ML을 통한 카테고리 분류 및 색/아이콘 결정
+    func iconAndColor(for todo: String) -> (String, Color) {
+        // ML 모델 예측
+        guard let model = try? ToDoML_1(configuration: MLModelConfiguration()),
+              let prediction = try? model.prediction(text: todo) else {
+            return ("", .primary)
+        }
+
+        // 예측 결과(label)에 따라 아이콘과 색 설정
+        switch prediction.label {
+        case "쇼핑":
+            return ("🛒", .blue)
+        case "회의":
+            return ("📅", .purple)
+        case "운동":
+            return ("🏋️", .green)
+        default:
+            return ("", .primary)
         }
     }
 }
