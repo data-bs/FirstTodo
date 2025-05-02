@@ -1,0 +1,64 @@
+# Xcode
+DerivedData/
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# Cocoapods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+
+# Archives
+*.xcarchive
+
+# Provisioning profiles
+*.mobileprovision
+
+# Certificates
+*.cer
+*.p12
+*.pem
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# SwiftPM Xcode project files
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# CreateML
+*.mlproj
+
+# 기타
+.DS_Store
+
+# Xcode Preview / Logs
+*.xcuserstate
+
+# git ignore 끝//
+//  .gitignore
+//  FirstTodo
+//
+//  Created by Beomseok Lee on 5/3/25.
+//
+
