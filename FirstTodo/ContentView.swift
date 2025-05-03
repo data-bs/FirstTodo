@@ -1,13 +1,48 @@
 import SwiftUI
 import CoreML
 
+// MARK: - 카테고리 Enum
+enum TodoCategory: String, CaseIterable {
+    case shopping = "쇼핑"
+    case meeting = "회의"
+    case workout = "운동"
+    case others = "기타"
+    
+    var icon: String {
+        switch self {
+        case .shopping: return "🛒"
+        case .meeting: return "📅"
+        case .workout: return "🏋️"
+        case .others: return ""
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .shopping: return .blue
+        case .meeting: return .purple
+        case .workout: return .green
+        case .others: return .primary
+        }
+    }
+}
+
+// MARK: - Todo 모델
+struct TodoItem: Identifiable, Codable, Hashable {
+    let id: UUID
+    let text: String
+    let category: String
+}
+
 struct ContentView: View {
     @State private var newTodo: String = ""
-    @State private var todoList: [String] = [] {
+    @State private var todoList: [TodoItem] = [] {
         didSet {
             saveTodoList()
         }
     }
+
+    private let todoListKey = "TodoList"
 
     var body: some View {
         VStack(spacing: 20) {
@@ -21,25 +56,34 @@ struct ContentView: View {
                 Button("추가하기") {
                     addTodo()
                 }
+                .disabled(newTodo.isEmpty)
                 .padding(.horizontal)
-                .background(Color.blue)
+                .background(newTodo.isEmpty ? Color.gray : Color.blue)
                 .foregroundColor(.white)
                 .cornerRadius(10)
             }
             .padding()
 
             List {
-                ForEach(todoList, id: \.self) { todo in
-                    let (icon, color) = iconAndColor(for: todo)
-
-                    HStack {
-                        Text(icon)
-                        Text(todo)
+                ForEach(groupedTodos.keys.sorted(by: sortCategories), id: \.self) { category in
+                    Section(header: Text(category)) {
+                        ForEach(groupedTodos[category] ?? []) { todo in
+                            let cat = TodoCategory(rawValue: todo.category) ?? .others
+                            HStack {
+                                if !cat.icon.isEmpty {
+                                    Text(cat.icon)
+                                }
+                                Text(todo.text)
+                            }
+                            .foregroundColor(cat.color)
+                        }
+                        .onDelete { indexSet in
+                            deleteTodo(category: category, at: indexSet)
+                        }
                     }
-                    .foregroundColor(color)
                 }
-                .onDelete(perform: deleteTodo)
             }
+            .listStyle(InsetGroupedListStyle())
 
             Spacer()
         }
@@ -49,50 +93,62 @@ struct ContentView: View {
         }
     }
 
-    // 할 일 추가하기
+    // MARK: - 추가하기
     func addTodo() {
-        if !newTodo.isEmpty {
-            todoList.append(newTodo)
-            newTodo = ""
+        guard !newTodo.isEmpty else { return }
+
+        let predictedCategory = ToDoMLPredictor.shared.predict(newTodo) ?? "기타"
+        let newItem = TodoItem(id: UUID(), text: newTodo, category: predictedCategory)
+        todoList.append(newItem)
+        newTodo = ""
+    }
+
+    // MARK: - 삭제하기
+    func deleteTodo(category: String, at offsets: IndexSet) {
+        if let index = groupedTodos[category]?.indices.first(where: { offsets.contains($0) }) {
+            let flatIndex = todoList.firstIndex(where: { $0.id == groupedTodos[category]![index].id })
+            if let flatIndex = flatIndex {
+                todoList.remove(at: flatIndex)
+            }
         }
     }
 
-    // 할 일 삭제하기
-    func deleteTodo(at offsets: IndexSet) {
-        todoList.remove(atOffsets: offsets)
-    }
-
-    // 저장하기
+    // MARK: - UserDefaults 저장/불러오기
     func saveTodoList() {
-        UserDefaults.standard.set(todoList, forKey: "TodoList")
+        if let encoded = try? JSONEncoder().encode(todoList) {
+            UserDefaults.standard.set(encoded, forKey: todoListKey)
+        }
     }
 
-    // 불러오기
     func loadTodoList() {
-        if let savedTodos = UserDefaults.standard.stringArray(forKey: "TodoList") {
-            todoList = savedTodos
+        if let data = UserDefaults.standard.data(forKey: todoListKey),
+           let decoded = try? JSONDecoder().decode([TodoItem].self, from: data) {
+            todoList = decoded
         }
     }
 
-    // ML을 통한 카테고리 분류 및 색/아이콘 결정
-    func iconAndColor(for todo: String) -> (String, Color) {
-        // ML 모델 예측
-        guard let model = try? ToDoML_1(configuration: MLModelConfiguration()),
-              let prediction = try? model.prediction(text: todo) else {
-            return ("", .primary)
-        }
+    // MARK: - 카테고리 그룹화
+    var groupedTodos: [String: [TodoItem]] {
+        Dictionary(grouping: todoList) { $0.category }
+    }
 
-        // 예측 결과(label)에 따라 아이콘과 색 설정
-        switch prediction.label {
-        case "쇼핑":
-            return ("🛒", .blue)
-        case "회의":
-            return ("📅", .purple)
-        case "운동":
-            return ("🏋️", .green)
-        default:
-            return ("", .primary)
-        }
+    func sortCategories(_ lhs: String, _ rhs: String) -> Bool {
+        let order = TodoCategory.allCases.map { $0.rawValue }
+        return (order.firstIndex(of: lhs) ?? order.count) < (order.firstIndex(of: rhs) ?? order.count)
+    }
+}
+
+// MARK: - ML 예측 싱글톤
+class ToDoMLPredictor {
+    static let shared = ToDoMLPredictor()
+    let model: ToDoML_1
+
+    private init() {
+        model = try! ToDoML_1(configuration: MLModelConfiguration())
+    }
+
+    func predict(_ text: String) -> String? {
+        return try? model.prediction(text: text).label
     }
 }
 
