@@ -41,12 +41,17 @@ struct TodoItem: Identifiable, Codable, Hashable {
 struct ContentView: View {
     @State private var newTodo: String = ""
     @State private var todoList: [TodoItem] = [] {
-        didSet { saveTodoList() }
+        didSet {
+            saveTodoList()
+            updateBadgeCount()
+        }
     }
     @State private var motivationMessage: String = ""
     @State private var showTodayOnly: Bool = false
     @State private var todayRecommendation: String? = nil
     @State private var selectedTargetDate: Date = Date()
+
+    @AppStorage("reminderTime") private var reminderTime: Double = 5.0
 
     private let todoListKey = "TodoList"
 
@@ -56,107 +61,129 @@ struct ContentView: View {
         "지금 시작하면 내일이 달라져요 ✨",
         "포기하지 마세요, 계속 가세요 🛤️"
     ]
-
     var body: some View {
-        VStack(spacing: 20) {
-            
-            // 입력 영역
-            VStack {
-                HStack {
-                    TextField("할 일을 입력하세요", text: $newTodo, onCommit: { addTodo() })
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .frame(width: 200)
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    
+                    // 입력 영역
+                    VStack {
+                        HStack {
+                            TextField("할 일을 입력하세요", text: $newTodo, onCommit: { addTodo() })
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 200)
 
-                    Button("추가하기") { addTodo() }
-                        .disabled(newTodo.isEmpty)
-                        .padding(.horizontal)
-                        .background(newTodo.isEmpty ? Color.gray : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
+                            Button("추가하기") { addTodo() }
+                                .disabled(newTodo.isEmpty)
+                                .padding(.horizontal)
+                                .background(newTodo.isEmpty ? Color.gray : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
 
-                // 목표 날짜 선택
-                DatePicker("목표 날짜", selection: $selectedTargetDate, displayedComponents: .date)
-                    .datePickerStyle(CompactDatePickerStyle())
-                    .padding(.horizontal)
-            }
-            .padding()
-
-            // 동기부여 메시지
-            if !motivationMessage.isEmpty {
-                Text(motivationMessage)
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-
-            // 오늘만 보기 토글
-            Toggle("오늘 예정된 할 일만 보기", isOn: $showTodayOnly)
-                .padding()
-
-            // 오늘의 추천
-            if let recommendation = todayRecommendation {
-                Text("👉 오늘의 추천: \(recommendation)")
-                    .font(.headline)
+                        // 목표 날짜 선택
+                        DatePicker("목표 날짜", selection: $selectedTargetDate, displayedComponents: .date)
+                            .datePickerStyle(CompactDatePickerStyle())
+                            .padding(.horizontal)
+                    }
                     .padding()
-            }
 
-            Button("오늘의 추천 뽑기") {
-                pickTodayRecommendation()
-            }
-            .padding(.bottom)
+                    // 동기부여 메시지
+                    if !motivationMessage.isEmpty {
+                        Text(motivationMessage)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
 
-            // Todo 리스트
-            List {
-                ForEach(groupedTodos.keys.sorted(by: sortCategories), id: \.self) { category in
-                    Section(header: Text(category)) {
-                        ForEach(groupedTodos[category] ?? []) { todo in
-                            let cat = TodoCategory(rawValue: todo.category) ?? .others
-                            HStack {
-                                Button(action: { toggleDone(todo) }) {
-                                    Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
-                                }
+                    // 오늘만 보기 토글
+                    Toggle("오늘 예정된 할 일만 보기", isOn: $showTodayOnly)
+                        .padding()
 
-                                if !cat.icon.isEmpty {
-                                    Text(cat.icon)
-                                }
+                    // 오늘의 추천
+                    if let recommendation = todayRecommendation {
+                        Text("👉 오늘의 추천: \(recommendation)")
+                            .font(.headline)
+                            .padding()
+                    }
 
-                                VStack(alignment: .leading) {
-                                    Text(todo.text)
-                                        .strikethrough(todo.isDone)
-                                        .opacity(todo.isDone ? 0.4 : 1.0)
+                    Button("오늘의 추천 뽑기") {
+                        pickTodayRecommendation()
+                    }
+                    .padding(.bottom)
 
-                                    // 목표 날짜 표시
-                                    if let targetDate = todo.targetDate {
-                                        Text(formatDate(targetDate))
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
+                    // Todo 리스트
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(groupedTodos.keys.sorted(by: sortCategories), id: \.self) { category in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(category)
+                                    .font(.headline)
+                                    .padding(.horizontal)
+
+                                ForEach(groupedTodos[category] ?? []) { todo in
+                                    let cat = TodoCategory(rawValue: todo.category) ?? .others
+                                    HStack {
+                                        Button(action: { toggleDone(todo) }) {
+                                            Image(systemName: todo.isDone ? "checkmark.circle.fill" : "circle")
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+
+                                        if !cat.icon.isEmpty {
+                                            Text(cat.icon)
+                                        }
+
+                                        VStack(alignment: .leading) {
+                                            Text(todo.text)
+                                                .strikethrough(todo.isDone)
+                                                .opacity(todo.isDone ? 0.4 : 1.0)
+
+                                            if let targetDate = todo.targetDate {
+                                                Text(formatDate(targetDate))
+                                                    .font(.caption)
+                                                    .foregroundColor(targetDate < Date() && !todo.isDone ? .red : .gray)
+                                            }
+                                        }
+                                        Spacer()
+
+                                        Button(action: {
+                                            if let index = todoList.firstIndex(where: { $0.id == todo.id }) {
+                                                todoList.remove(at: index)
+                                            }
+                                        }) {
+                                            Image(systemName: "trash")
+                                                .foregroundColor(.red)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
                                     }
+                                    .foregroundColor(cat.color)
+                                    .padding(.horizontal)
                                 }
                             }
-                            .foregroundColor(cat.color)
-                        }
-                        .onDelete { indexSet in
-                            deleteTodo(category: category, at: indexSet)
+                            .padding(.vertical, 5)
                         }
                     }
+                    .padding(.horizontal)
+
+                    // 완료 통계
+                    if !todoList.isEmpty {
+                        Text("완료: \(completedCount) / \(todoList.count) (\(completionRate, specifier: "%.1f")%)")
+                            .font(.caption)
+                            .padding()
+                    }
+                }
+                .padding()
+                .navigationTitle("오늘의 할 일")
+                .toolbar {
+                    NavigationLink(destination: SettingsView(reminderTime: $reminderTime)) {
+                        Text("설정")
+                    }
+                }
+                .onAppear {
+                    loadTodoList()
+                    cleanOldTodos()
+                    requestNotificationPermission()
+                    updateBadgeCount()
                 }
             }
-            .listStyle(InsetGroupedListStyle())
-
-            Spacer()
-
-            // 완료 통계
-            if !todoList.isEmpty {
-                Text("완료: \(completedCount) / \(todoList.count) (\(completionRate, specifier: "%.1f")%)")
-                    .font(.caption)
-                    .padding()
-            }
-        }
-        .padding()
-        .onAppear {
-            loadTodoList()
-            cleanOldTodos()
-            requestNotificationPermission()
         }
     }
 
@@ -224,7 +251,16 @@ struct ContentView: View {
     }
 
     var groupedTodos: [String: [TodoItem]] {
-        Dictionary(grouping: filteredTodos) { $0.category }
+        Dictionary(grouping: sortedTodos) { $0.category }
+    }
+
+    var sortedTodos: [TodoItem] {
+        filteredTodos.sorted {
+            if $0.isDone == $1.isDone {
+                return $0.dateAdded < $1.dateAdded
+            }
+            return !$0.isDone && $1.isDone
+        }
     }
 
     func sortCategories(_ lhs: String, _ rhs: String) -> Bool {
@@ -266,10 +302,35 @@ struct ContentView: View {
         content.body = "\(todo.text)을(를) 잊지 마세요!"
         content.sound = .default
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5 * 60, repeats: false)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: reminderTime * 60, repeats: false)
         let request = UNNotificationRequest(identifier: todo.id.uuidString, content: content, trigger: trigger)
 
         UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - 아이콘 뱃지
+    func updateBadgeCount() {
+        UIApplication.shared.applicationIconBadgeNumber = todoList.filter { !$0.isDone }.count
+    }
+}
+
+// MARK: - 설정화면
+struct SettingsView: View {
+    @Binding var reminderTime: Double
+
+    var body: some View {
+        Form {
+            Section(header: Text("알림 설정")) {
+                VStack(alignment: .leading) {
+                    Text("알림 시간 (분 후)")
+                    Slider(value: $reminderTime, in: 1...1440, step: 1)
+                    Text("\(Int(reminderTime))분 후에 알림")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .navigationTitle("설정")
     }
 }
 
